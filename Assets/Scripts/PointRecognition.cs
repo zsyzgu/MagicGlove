@@ -9,37 +9,43 @@ namespace HandRecoginition {
     class PointRecognition {
         const int POINT_DIST = 5;
         const int CROSS_SIZE = 2;
-        const int MAX_EDGE_LEN = 10;
+        const int CENTRE_CROSS_SIZE = 5;
+        const int MAX_EDGE_LEN = 15;
         const float LINE_K = 0.5f;
         const int BLACK_THRESHOLD = 20;
         int[] DIR_X = {0, 1, 0, -1};
         int[] DIR_Y = {-1, 0, 1, 0};
 
-        /*const int CENTRE_Y = 300;
-        const float BLOCK_Y = 10f;
-        const float Z_D_RATIO = 0.05f;*/
+        const int CENTRE_Y = 165;
+        const float BLOCK_Y = 10.81f;
+        const float Z_D_RATIO = 0.01f;
 
-        int H, W;
-        int[,] mat;
+        int[,] mat, sum;
 
-        private void calnMat(Mat src) {
-            H = src.Height;
-            W = src.Width;
-            mat = new int[W, H];
+        public int[,] getMatFromImage() {
+            Mat src = new Mat("input.jpg", LoadMode.GrayScale);
+
+            int H = src.Height;
+            int W = src.Width;
+            int[,] mat = new int[W, H];
             IntPtr ptr = src.Data;
             for (int x = 0; x < src.Width; x++) {
                 for (int y = 0; y < src.Height; y++) {
                     mat[x, y] = Marshal.ReadByte(ptr, src.Width * y + x);
                 }
             }
+            
+            return mat;
         }
 
         private Point[] calnPoints() {
             List<Point> points = new List<Point>();
 
+            int W = mat.GetLength(0);
+            int H = mat.GetLength(1);
             int[,] rowSum = new int[W, H];
             int[,] colSum = new int[W, H];
-            int[,] sum = new int[W, H];
+            sum = new int[W, H];
             for (int x = 0; x < W; x++) {
                 for (int y = 0; y < H; y++) {
                     if (mat[x, y] > BLACK_THRESHOLD) {
@@ -221,13 +227,16 @@ namespace HandRecoginition {
         }
 
         private Point[] calibrateCoords(Point[] points, Point[] coords) {
+            int W = mat.GetLength(0);
+            int H = mat.GetLength(1);
+
             int centreX = 0, centreY = 0;
             double maxPower = 0;
             for (int i = 0; i < coords.Length; i++) {
                 int x = points[i].X, y = points[i].Y;
-                if (x - CROSS_SIZE >= 0 && x + CROSS_SIZE < W && y - CROSS_SIZE >= 0 && y + CROSS_SIZE < H) {
+                if (x - CENTRE_CROSS_SIZE >= 0 && x + CENTRE_CROSS_SIZE < W && y - CENTRE_CROSS_SIZE >= 0 && y + CENTRE_CROSS_SIZE < H) {
                     double power = 0;
-                    for (int j = 1; j < CROSS_SIZE; j++) {
+                    for (int j = 1; j < CENTRE_CROSS_SIZE; j++) {
                         power += mat[x - j, y - j] + mat[x - j, y + j] + mat[x + j, y - j] + mat[x + j, y + j];
                     }
                     if (power > maxPower) {
@@ -237,7 +246,7 @@ namespace HandRecoginition {
                     }
                 }
             }
-
+            
             for (int i = 0; i < coords.Length; i++) {
                 coords[i] -= new Point(centreX, centreY);
             }
@@ -247,7 +256,7 @@ namespace HandRecoginition {
         int runCnt = 0;
         float runTime = 0;
 
-        public void recognize(Mat src, out Vector3[] points, out Point[] coords) {
+        public void recognize(int[,] mat, out Vector3[] points, out Point[] coords) {
             runTime += Time.deltaTime;
             runCnt++;
             if (runTime > 1f) {
@@ -256,8 +265,11 @@ namespace HandRecoginition {
                 runCnt = 0;
             }
 
-            calnMat(src);
-            
+            this.mat = mat;
+
+            int W = mat.GetLength(0);
+            int H = mat.GetLength(1);
+
             points = null;
             coords = null;
             Point[] pixels = calnPoints();
@@ -269,7 +281,7 @@ namespace HandRecoginition {
             points = new Vector3[pixels.Length];
             for (int i = 0; i < pixels.Length; i++) {
                 points[i] = new Vector3(pixels[i].X, pixels[i].Y, 0);
-                //points[i] = new Vector3(-0.5f + (float)pixels[i].X / src.Width, 0.5f - (float)(pixels[i].Y - CENTRE_Y + src.Height / 2) / src.Width, (float)(-pixels[i].Y + (CENTRE_Y + coords[i].Y * BLOCK_Y)) * Z_D_RATIO);
+                //points[i] = new Vector3(-0.5f + (float)pixels[i].X / W, -0.5f + (float)pixels[i].Y / W, (float)(pixels[i].Y - (CENTRE_Y + coords[i].Y * BLOCK_Y)) * Z_D_RATIO);
             }
         }
     }

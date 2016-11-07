@@ -3,17 +3,22 @@ using System.Collections;
 using System.Collections.Generic;
 using OpenCvSharp;
 using OpenCvSharp.CPlusPlus;
+using System.IO;
 using HandRecoginition;
 
 public class MainCamera : MonoBehaviour {
+    const int R = 37;
+    const int C = 65;
+    const string DIR = "/../Data/";
     WebCamTexture webCamera;
     Texture2D output;
-    List<GameObject> objList = new List<GameObject>();
-    PointRecognition recognition = new PointRecognition();
+
+    int dataId = 0;
+    StreamWriter dataWriter;
 
     void Start () {
         StartCoroutine(startWebCamera());
-        //deal();
+        dataWriter = new StreamWriter(Application.dataPath + DIR + "data.txt", true);
     }
 
     void Update() {
@@ -28,16 +33,14 @@ public class MainCamera : MonoBehaviour {
 
     void deal() {
         if (webCamera != null) {
-            //int[,] mat = recognition.getMatFromImage();
+            //int[,] mat = new PointRecognition().getMatFromImage();
             int[,] mat = getMatFromCamera();
-            Vector3[] points = null;
-            Point[] coords = null;
-            recognition.recognize(mat, out points, out coords);
-
-            showOutput(points, coords);
-            //showBalls(points, coords);
-            //saveImage(points, coords);
-            //saveImage(mat);
+            int[] vec = new PointRecognition().recognize(mat);
+            
+            showOutput(vec);
+            saveImage();
+            saveData(vec);
+            dataId++;
         }
     }
     
@@ -58,72 +61,51 @@ public class MainCamera : MonoBehaviour {
         return mat;
     }
 
-    private void showOutput(Vector3[] points, Point[] coords) {
-        int W = webCamera.width;
-        int H = webCamera.height;
-        if (output == null) {
-            output = new Texture2D(W, H);
+    private void drawPoint(int oX, int oY, Color color) {
+        for (int x = oX - 1; x <= oX + 1; x++) {
+            for (int y = oY - 1; y <= oY + 1; y++) {
+                if (0 <= x && x < webCamera.width && 0 <= y && y < webCamera.height) {
+                    output.SetPixel(x, y, color);
+                }
+            }
         }
-        for (int x = 0; x < W; x++) {
-            for (int y = 0; y < H; y++) {
+    }
+
+    private void showOutput(int[] vec) {
+        if (output == null) {
+            output = new Texture2D(webCamera.width, webCamera.height);
+        }
+        for (int x = 0; x < webCamera.width; x++) {
+            for (int y = 0; y < webCamera.height; y++) {
                 output.SetPixel(x, y, webCamera.GetPixel(x, y));
             }
         }
-        for (int i = 0; i < points.Length; i++) {
-            for (int x = (int)points[i].x - 1; x <= (int)points[i].x + 1; x++) {
-                for (int y = (int)points[i].y - 1; y <= (int) points[i].y + 1; y++) {
-                    if (0 <= x && x < W && 0 <= y && y < H) {
-                        output.SetPixel(x, y, Color.red);
-                        if (coords[i].X == 0 && coords[i].Y == 0) {
-                            output.SetPixel(x, y, Color.blue);
-                        }
-                    }
+        for (int i = 0; i < vec.Length; i += 2) {
+            if (vec[i] != -1) {
+                int r = (i / 2) / C;
+                int c = (i / 2) % C;
+                if (r == R / 2 || c == C / 2) {
+                    drawPoint(vec[i], vec[i + 1], Color.blue);
+                } else {
+                    drawPoint(vec[i], vec[i + 1], Color.red);
                 }
             }
         }
         output.Apply();
     }
 
-    private void showBalls(Vector3[] points, Point[] coords) {
-        for (int i = 0; i < objList.Count; i++) {
-            GameObject.Destroy(objList[i]);
-        }
-        objList.Clear();
-
-        for (int i = 0; i < points.Length; i++) {
-            GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            sphere.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
-            sphere.transform.position = points[i];
-            if (coords[i].X == 0 && coords[i].Y == 0) {
-                sphere.GetComponent<Renderer>().material.color = Color.red;
-            }
-            objList.Add(sphere);
-        }
+    private void saveImage() {
+        byte[] bytes = output.EncodeToPNG();
+        File.WriteAllBytes(Application.dataPath + DIR + dataId + ".png", bytes);
+        output.EncodeToJPG();
     }
 
-    private void saveImage(Vector3[] points, Point[] coords) {
-        Mat oup = new Mat("input.jpg", LoadMode.Color);
-        for (int i = 0; i < points.Length; i++) {
-            oup.Circle(new Point(points[i].x, points[i].y), 0, Scalar.Red, 2);
-            if (coords[i].X == 0 && coords[i].Y == 0) {
-                oup.Circle(new Point(points[i].x, points[i].y), 0, Scalar.Blue, 2);
-            }
+    private void saveData(int[] vec) {
+        dataWriter.Write(dataId);
+        for (int i = 0; i < vec.Length; i++) {
+            dataWriter.Write(" " + vec[i]);
         }
-
-        Cv.SaveImage("output.jpg", oup.ToCvMat());
-    }
-
-    private void saveImage(int[,] mat) {
-        Mat oup = new Mat("input.jpg", LoadMode.GrayScale);
-        int W = oup.Width;
-        int H = oup.Height;
-        for (int x = 0; x < W; x++) {
-            for (int y = 0; y < H; y++) {
-                oup.Set<int>(H - y - 1, x, mat[x, y]);
-            }
-        }
-
-        Cv.SaveImage("output.jpg", oup.ToCvMat());
+        dataWriter.WriteLine();
     }
 
     IEnumerator startWebCamera() {

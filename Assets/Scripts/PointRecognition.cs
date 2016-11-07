@@ -7,11 +7,12 @@ using System.Runtime.InteropServices;
 
 namespace HandRecoginition {
     class PointRecognition {
-        const int POINT_DIST = 5;
+        const int R = 37;
+        const int C = 65;
+        const int POINT_DIST = 4;
         const int CROSS_SIZE = 2;
-        const int CENTRE_CROSS_SIZE = 5;
-        const int MAX_EDGE_LEN = 15;
-        const float LINE_K = 0.5f;
+        const int MAX_EDGE_LEN = 10;
+        const float LINE_K = 0.3f;
         const int BLACK_THRESHOLD = 20;
         int[] DIR_X = {0, 1, 0, -1};
         int[] DIR_Y = {-1, 0, 1, 0};
@@ -22,7 +23,7 @@ namespace HandRecoginition {
 
         int[,] mat, sum;
 
-        public int[,] getMatFromImage() {
+        /*public int[,] getMatFromImage() {
             Mat src = new Mat("input.jpg", LoadMode.GrayScale);
 
             int H = src.Height;
@@ -36,7 +37,7 @@ namespace HandRecoginition {
             }
             
             return mat;
-        }
+        }*/
 
         private Point[] calnPoints() {
             List<Point> points = new List<Point>();
@@ -101,7 +102,7 @@ namespace HandRecoginition {
                 return true;
             }
             double k = Math.Abs((y1 - y0) / (x1 - x0));
-            return k >= LINE_K || k <= 1 / LINE_K;
+            return k <= LINE_K || k >= 1 / LINE_K;
         }
 
         private int[,] calnEdges(Point[] points) {
@@ -234,10 +235,10 @@ namespace HandRecoginition {
             double maxPower = 0;
             for (int i = 0; i < coords.Length; i++) {
                 int x = points[i].X, y = points[i].Y;
-                if (x - CENTRE_CROSS_SIZE >= 0 && x + CENTRE_CROSS_SIZE < W && y - CENTRE_CROSS_SIZE >= 0 && y + CENTRE_CROSS_SIZE < H) {
+                if (x - CROSS_SIZE >= 0 && x + CROSS_SIZE < W && y - CROSS_SIZE >= 0 && y + CROSS_SIZE < H) {
                     double power = 0;
-                    for (int j = 1; j < CENTRE_CROSS_SIZE; j++) {
-                        power += mat[x - j, y - j] + mat[x - j, y + j] + mat[x + j, y - j] + mat[x + j, y + j];
+                    for (int j = 0; j < CROSS_SIZE; j++) {
+                        power += sum[x - j, y - j] + sum[x - j, y + j] + sum[x + j, y - j] + sum[x + j, y + j];
                     }
                     if (power > maxPower) {
                         maxPower = power;
@@ -253,36 +254,32 @@ namespace HandRecoginition {
             return coords;
         }
 
-        int runCnt = 0;
-        float runTime = 0;
-
-        public void recognize(int[,] mat, out Vector3[] points, out Point[] coords) {
-            runTime += Time.deltaTime;
-            runCnt++;
-            if (runTime > 1f) {
-                Debug.Log(runCnt);
-                runTime = 0f;
-                runCnt = 0;
-            }
-
+        public int[] recognize(int[,] mat) {
             this.mat = mat;
 
             int W = mat.GetLength(0);
             int H = mat.GetLength(1);
 
-            points = null;
-            coords = null;
-            Point[] pixels = calnPoints();
+            Point[] points = calnPoints();
 
-            int[,] edges = calnEdges(pixels);
-            coords = calnCoords(pixels, edges);
-            coords = calibrateCoords(pixels, coords);
+            int[,] edges = calnEdges(points);
+            Point[] coords = calnCoords(points, edges);
+            coords = calibrateCoords(points, coords);
 
-            points = new Vector3[pixels.Length];
-            for (int i = 0; i < pixels.Length; i++) {
-                points[i] = new Vector3(pixels[i].X, pixels[i].Y, 0);
-                //points[i] = new Vector3(-0.5f + (float)pixels[i].X / W, -0.5f + (float)pixels[i].Y / W, (float)(pixels[i].Y - (CENTRE_Y + coords[i].Y * BLOCK_Y)) * Z_D_RATIO);
+            int[] vec = new int[R * C * 2];
+            for (int i = 0; i < vec.Length; i++) {
+                vec[i] = -1;
             }
+            for (int i = 0; i < points.Length; i++) {
+                int r = coords[i].Y + R / 2;
+                int c = coords[i].X + C / 2;
+                if (0 <= r && r < R && 0 <= c && c < C) {
+                    vec[(r * C + c) * 2] = points[i].X;
+                    vec[(r * C + c) * 2 + 1] = points[i].Y;
+                }
+            }
+
+            return vec;
         }
     }
 }

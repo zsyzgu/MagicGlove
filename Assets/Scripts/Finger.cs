@@ -9,14 +9,20 @@ public class Finger : MonoBehaviour {
     private Controller handController;
     private GameObject[] spheres = new GameObject[SPHERE_NUM];
     private GameObject[] cylinders = new GameObject[CYLINER_NUM];
+    private Predict predict;
     
 	void Start () {
         handController = new Controller();
+        predict = new Predict();
 	}
 	
 	void Update () {
         drawHand(getFingerData());
 	}
+
+    public void draw(int[] vec) {
+        drawHand(predict.getFinderData(vec));
+    }
 
     public float[] getFingerData() {
         float[] ret = null;

@@ -27,7 +27,8 @@ public class MainCamera : MonoBehaviour {
             int[,] mat = getMatFromCamera();
             int[] vec = new PointRecognition().recognize(mat);
 
-            showOutput(vec);
+            //showOutput(vec);
+            GetComponent<Finger>().draw(vec);
             if (dataId % 20 == 0) {
                 saveImage();
             }
@@ -91,9 +92,11 @@ public class MainCamera : MonoBehaviour {
     }
 
     private void saveImage() {
-        byte[] bytes = output.EncodeToPNG();
-        File.WriteAllBytes(Application.dataPath + DIR + dataId + ".png", bytes);
-        output.EncodeToJPG();
+        if (output != null) {
+            byte[] bytes = output.EncodeToPNG();
+            File.WriteAllBytes(Application.dataPath + DIR + dataId + ".png", bytes);
+            output.EncodeToJPG();
+        }
     }
 
     private void saveData(int[] vec) {

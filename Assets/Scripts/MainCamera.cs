@@ -22,25 +22,23 @@ public class MainCamera : MonoBehaviour {
     }
 
     void Update() {
-        deal();
+        if (webCamera != null) {
+            //int[,] mat = new PointRecognition().getMatFromImage();
+            int[,] mat = getMatFromCamera();
+            int[] vec = new PointRecognition().recognize(mat);
+
+            showOutput(vec);
+            if (dataId % 20 == 0) {
+                saveImage();
+            }
+            saveData(vec);
+            dataId++;
+        }
     }
 
     void OnGUI() {
         if (output != null) {
             GUI.DrawTexture(new UnityEngine.Rect(0, 0, Screen.width, Screen.height), output);
-        }
-    }
-
-    void deal() {
-        if (webCamera != null) {
-            //int[,] mat = new PointRecognition().getMatFromImage();
-            int[,] mat = getMatFromCamera();
-            int[] vec = new PointRecognition().recognize(mat);
-            
-            showOutput(vec);
-            saveImage();
-            saveData(vec);
-            dataId++;
         }
     }
     
@@ -52,9 +50,11 @@ public class MainCamera : MonoBehaviour {
         int W = webCamera.width;
         int H = webCamera.height;
         mat = new int[W, H];
-        for (int x = 0; x < W; x++) {
-            for (int y = 0; y < H; y++) {
-                mat[x, y] = (int)(webCamera.GetPixel(x, y).grayscale * 255);
+        Color[] colors = webCamera.GetPixels();
+        int cnt = 0;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                mat[x, y] = (int)(colors[cnt++].grayscale * 255);
             }
         }
 
@@ -75,11 +75,7 @@ public class MainCamera : MonoBehaviour {
         if (output == null) {
             output = new Texture2D(webCamera.width, webCamera.height);
         }
-        for (int x = 0; x < webCamera.width; x++) {
-            for (int y = 0; y < webCamera.height; y++) {
-                output.SetPixel(x, y, webCamera.GetPixel(x, y));
-            }
-        }
+        output.SetPixels(webCamera.GetPixels());
         for (int i = 0; i < vec.Length; i += 2) {
             if (vec[i] != -1) {
                 int r = (i / 2) / C;
@@ -105,6 +101,16 @@ public class MainCamera : MonoBehaviour {
         for (int i = 0; i < vec.Length; i++) {
             dataWriter.Write(" " + vec[i]);
         }
+        float[] finger = GetComponent<Finger>().getFingerData();
+        if (finger == null) {
+            for (int i = 0; i < 63; i++) {
+                dataWriter.Write(" 0");
+            }
+        } else {
+            for (int i = 0; i < finger.Length; i++) {
+                dataWriter.Write(" " + finger[i]);
+            }
+        }
         dataWriter.WriteLine();
     }
 
@@ -114,8 +120,10 @@ public class MainCamera : MonoBehaviour {
         if (Application.HasUserAuthorization(UserAuthorization.WebCam)) {
             WebCamDevice[] devices = WebCamTexture.devices;
             string deviceName = devices[0].name;
-            if (devices.Length > 2 && devices[1].name == "Logitech HD Webcam C525") {
-                deviceName = devices[1].name;
+            for (int i = 0; i < devices.Length; i++) {
+                if (devices[i].name == "Logitech HD Webcam C525") {
+                    deviceName = devices[i].name;
+                }
             }
             webCamera = new WebCamTexture(deviceName);
             webCamera.Play();

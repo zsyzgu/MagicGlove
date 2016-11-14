@@ -14,16 +14,17 @@ namespace HandRecoginition {
         const int MAX_EDGE_LEN = 10;
         const float LINE_K = 0.3f;
         const int BLACK_THRESHOLD = 20;
-        int[] DIR_X = {0, 1, 0, -1};
-        int[] DIR_Y = {-1, 0, 1, 0};
+        const int MIN_CENTRE_BLOCK = 100;
+        const float CENTRE_X0 = 0.3f;
+        const float CENTRE_X1 = 0.7f;
+        const float CENTRE_Y0 = 0.0f;
+        const float CENTRE_Y1 = 1.0f;
+        Point[] DIR = {new Point(0, -1), new Point(1, 0), new Point(0, 1), new Point(-1, 0)};
 
-        const int CENTRE_Y = 165;
-        const float BLOCK_Y = 10.81f;
-        const float Z_D_RATIO = 0.01f;
-
+        int W, H, X0, X1, Y0, Y1;
         int[,] mat, sum;
 
-        /*public int[,] getMatFromImage() {
+        public int[,] getMatFromImage() {
             Mat src = new Mat("input.jpg", LoadMode.GrayScale);
 
             int H = src.Height;
@@ -35,43 +36,77 @@ namespace HandRecoginition {
                     mat[x, y] = Marshal.ReadByte(ptr, src.Width * y + x);
                 }
             }
-            
+
             return mat;
-        }*/
+        }
+
+        private void initialize() {
+            W = mat.GetLength(0);
+            H = mat.GetLength(1);
+
+            X0 = W;
+            X1 = 0;
+            Y0 = H;
+            Y1 = 0;
+            for (int x = 0; x < W; x += 3) {
+                for (int y = 0; y < H; y += 3) {
+                    if (mat[x, y] > BLACK_THRESHOLD) {
+                        if (x < X0) {
+                            X0 = x;
+                        }
+                        if (x > X1) {
+                            X1 = x;
+                        }
+                        if (y < Y0) {
+                            Y0 = y;
+                        }
+                        if (y > Y1) {
+                            Y1 = y;
+                        }
+                    }
+                }
+            }
+            X0 = Math.Max(0, X0 - 5);
+            Y0 = Math.Max(0, Y0 - 5);
+            X1 = Math.Min(W - 1, X1 + 5);
+            Y1 = Math.Min(H - 1, Y1 + 5);
+            X1++;
+            Y1++;
+        }
 
         private Point[] calnPoints() {
             List<Point> points = new List<Point>();
+            if (X1 - X0 <= 2 * CROSS_SIZE || Y1 - Y0 <= 2 * CROSS_SIZE) {
+                Debug.Log("Black image");
+                return points.ToArray();
+            }
 
-            int W = mat.GetLength(0);
-            int H = mat.GetLength(1);
-            int[,] rowSum = new int[W, H];
-            int[,] colSum = new int[W, H];
             sum = new int[W, H];
-            for (int x = 0; x < W; x++) {
-                for (int y = 0; y < H; y++) {
-                    if (mat[x, y] > BLACK_THRESHOLD) {
-                        colSum[x, y] = rowSum[x, y] = mat[x, y];
-                        if (x - 1 >= 0) {
-                            rowSum[x, y] += rowSum[x - 1, y];
-                        }
-                        if (y - 1 >= 0) {
-                            colSum[x, y] += colSum[x, y - 1];
-                        }
-                    }
+            for (int x = X0; x < X1; x++) {
+                int p = 0;
+                for (int y = Y0; y <= Y0 + 2 * CROSS_SIZE; y++) {
+                    p = p + mat[x, y];
+                }
+                sum[x, Y0 + CROSS_SIZE] = p;
+                for (int y = Y0 + CROSS_SIZE + 1; y + CROSS_SIZE < Y1; y++) {
+                    p += mat[x, y + CROSS_SIZE] - mat[x, y - CROSS_SIZE - 1];
+                    sum[x, y] = p;
                 }
             }
-            for (int x = CROSS_SIZE + 1; x + CROSS_SIZE + 1 < W; x++) {
-                for (int y = CROSS_SIZE + 1; y + CROSS_SIZE + 1 < H; y++) {
-                    if (mat[x, y] > BLACK_THRESHOLD) {
-                        sum[x, y] = -mat[x, y];
-                        sum[x, y] += rowSum[x + CROSS_SIZE, y] - rowSum[x - CROSS_SIZE - 1, y];
-                        sum[x, y] += colSum[x, y + CROSS_SIZE] - colSum[x, y - CROSS_SIZE - 1];
-                    }
+            for (int y = Y0; y < Y1; y++) {
+                int p = 0;
+                for (int x = X0; x <= X0 + 2 * CROSS_SIZE; x++) {
+                    p = p + mat[x, y];
+                }
+                sum[X0 + CROSS_SIZE, y] += p;
+                for (int x = X0 + CROSS_SIZE + 1; x + CROSS_SIZE < X1; x++) {
+                    p += mat[x + CROSS_SIZE, y] - mat[x - CROSS_SIZE - 1, y];
+                    sum[x, y] += p - mat[x, y];
                 }
             }
 
-            for (int x = CROSS_SIZE + 2; x + CROSS_SIZE + 2 < W; x++) {
-                for (int y = CROSS_SIZE + 2; y + CROSS_SIZE + 2 < H; y++) {
+            for (int x = X0 + CROSS_SIZE + 2; x + CROSS_SIZE + 2 < X1; x++) {
+                for (int y = Y0 + CROSS_SIZE + 2; y + CROSS_SIZE + 2 < Y1; y++) {
                     if (mat[x, y] > BLACK_THRESHOLD && sum[x, y] > sum[x - 1, y] && sum[x, y] > sum[x + 1, y] && sum[x, y] > sum[x, y - 1] && sum[x, y] > sum[x, y + 1]) {
                         bool check = true;
                         for (int i = points.Count - 1; i >= 0; i--) {
@@ -97,11 +132,11 @@ namespace HandRecoginition {
             return points.ToArray();
         }
 
-        private bool checkLine(int x0, int y0, int x1, int y1) {
-            if (x0 == x1) {
+        private bool checkLine(int dx, int dy) {
+            if (dx == 0) {
                 return true;
             }
-            double k = Math.Abs((y1 - y0) / (x1 - x0));
+            double k = Math.Abs(dy / dx);
             return k <= LINE_K || k >= 1 / LINE_K;
         }
 
@@ -131,7 +166,7 @@ namespace HandRecoginition {
                     }
                     double dist = points[i].DistanceTo(points[j]);
                     if (dist < minDist[d]) {
-                        if (checkLine(points[i].X, points[i].Y, points[j].X, points[j].Y)) {
+                        if (checkLine(points[i].X - points[j].X, points[i].Y - points[j].Y)) {
                             minDist[d] = dist;
                             edges[i, d] = j;
                             edges[j, d ^ 2] = i;
@@ -168,23 +203,47 @@ namespace HandRecoginition {
             }
         }
 
+        private int anc(int[] par, int t) {
+            if (par[t] != t) {
+                par[t] = anc(par, par[t]);
+            }
+            return par[t];
+        }
+
+        private int getCentre(Point[] points) {
+            int centreId = -1;
+            double maxPower = 0;
+            for (int i = 0; i < points.Length; i++) {
+                int x = points[i].X, y = points[i].Y;
+                if (x - CROSS_SIZE >= W * CENTRE_X0 && x + CROSS_SIZE < W * CENTRE_X1 && y - CROSS_SIZE >= H * CENTRE_Y0 && y + CROSS_SIZE < H * CENTRE_Y1) {
+                    double power = 0;
+                    for (int j = 0; j < CROSS_SIZE; j++) {
+                        power += sum[x - j, y - j] + sum[x - j, y + j] + sum[x + j, y - j] + sum[x + j, y + j];
+                    }
+                    if (power > maxPower) {
+                        maxPower = power;
+                        centreId = i;
+                    }
+                }
+            }
+            return centreId;
+        }
+
         private Point[] calnCoords(Point[] points, int[,] edges) {
             int n = points.Length;
             Point[] coords = new Point[n];
             int[] par = new int[n];
-            List<int>[] member = new List<int>[n];
 
             for (int i = 0; i < n; i++) {
                 par[i] = i;
-                member[i] = new List<int>();
-                member[i].Add(i);
             }
             List<EdgeInfo> order = new List<EdgeInfo>();
 
             for (int i = 0; i < n; i++) {
-                for (int d = 0; d < 4; d++) {
-                    if (edges[i, d] != -1) {
-                        order.Add(new EdgeInfo(i, edges[i, d], d, points[i].DistanceTo(points[edges[i, d]])));
+                for (int d = 0; d < 2; d++) {
+                    int j = edges[i, d];
+                    if (j != -1) {
+                        order.Add(new EdgeInfo(i, j, d, points[i].DistanceTo(points[j])));
                     }
                 }
             }
@@ -194,90 +253,67 @@ namespace HandRecoginition {
                 int u = order[i].u;
                 int v = order[i].v;
                 int d = order[i].d;
-                if (par[u] != par[v]) {
-                    if (member[par[u]].Count < member[par[v]].Count) {
-                        int tmp = u;
-                        u = v;
-                        v = tmp;
-                        d ^= 2;
+                int uid = anc(par, u);
+                int vid = anc(par, v);
+                if (uid != vid) {
+                    par[uid] = vid;
+                } else {
+                    edges[u, d] = edges[v, d ^ 2] = -1;
+                }
+            }
+
+            int st = getCentre(points);
+            if (st == -1) {
+                return coords;
+            }
+
+            par[st] = -1;
+            coords[st] = new Point(C / 2, R / 2);
+            int[] queue = new int[n];
+            int tot = 0;
+            queue[tot++] = st;
+            for (int i = 0; i < tot; i++) {
+                int u = queue[i];
+                for (int d = 0; d < 4; d++) {
+                    int v = edges[u, d];
+                    if (v != -1 && par[v] != -1) {
+                        par[v] = -1;
+                        coords[v] = coords[u] + DIR[d];
+                        queue[tot++] = v;
                     }
-                    Point shift = new Point(coords[u].X - coords[v].X + DIR_X[d], coords[u].Y - coords[v].Y + DIR_Y[d]);
-                    int parV = par[v];
-                    for (int j = 0; j < member[parV].Count; j++) {
-                        int id = member[parV][j];
-                        coords[id] += shift;
-                        member[par[u]].Add(id);
-                        par[id] = par[u];
-                    }
-                    member[parV].Clear();
                 }
             }
 
             for (int i = 0; i < n; i++) {
-                for (int d = 0; d < 4; d++) {
-                    int v = edges[i, d];
-                    if (v != -1) {
-                        if (coords[i].X + DIR_X[d] != coords[v].X || coords[i].Y + DIR_Y[d] != coords[v].Y) {
-                            edges[i, d] = -1;
-                        }
-                    }
+                if (par[i] != -1) {
+                    coords[i] = new Point(-1, -1);
                 }
             }
 
             return coords;
         }
 
-        private Point[] calibrateCoords(Point[] points, Point[] coords) {
-            int W = mat.GetLength(0);
-            int H = mat.GetLength(1);
-
-            int centreX = 0, centreY = 0;
-            double maxPower = 0;
-            for (int i = 0; i < coords.Length; i++) {
-                int x = points[i].X, y = points[i].Y;
-                if (x - CROSS_SIZE >= 0 && x + CROSS_SIZE < W && y - CROSS_SIZE >= 0 && y + CROSS_SIZE < H) {
-                    double power = 0;
-                    for (int j = 0; j < CROSS_SIZE; j++) {
-                        power += sum[x - j, y - j] + sum[x - j, y + j] + sum[x + j, y - j] + sum[x + j, y + j];
-                    }
-                    if (power > maxPower) {
-                        maxPower = power;
-                        centreX = coords[i].X;
-                        centreY = coords[i].Y;
-                    }
-                }
-            }
-            
-            for (int i = 0; i < coords.Length; i++) {
-                coords[i] -= new Point(centreX, centreY);
-            }
-            return coords;
-        }
-
-        public int[] recognize(int[,] mat) {
-            this.mat = mat;
-
-            int W = mat.GetLength(0);
-            int H = mat.GetLength(1);
-
-            Point[] points = calnPoints();
-
-            int[,] edges = calnEdges(points);
-            Point[] coords = calnCoords(points, edges);
-            coords = calibrateCoords(points, coords);
-
+        private int[] flatten(Point[] points, Point[] coords) {
             int[] vec = new int[R * C * 2];
-            for (int i = 0; i < vec.Length; i++) {
-                vec[i] = -1;
-            }
             for (int i = 0; i < points.Length; i++) {
-                int r = coords[i].Y + R / 2;
-                int c = coords[i].X + C / 2;
+                int r = coords[i].Y;
+                int c = coords[i].X;
                 if (0 <= r && r < R && 0 <= c && c < C) {
                     vec[(r * C + c) * 2] = points[i].X;
                     vec[(r * C + c) * 2 + 1] = points[i].Y;
                 }
             }
+            return vec;
+        }
+
+        public int[] recognize(int[,] mat) {
+            this.mat = mat;
+            initialize();
+
+            Point[] points = calnPoints();
+            int[,] edges = calnEdges(points);
+            Point[] coords = calnCoords(points, edges);
+            int[] vec = flatten(points, coords);
 
             return vec;
         }
